@@ -50,7 +50,7 @@ LOADERS = [
   background:conic-gradient(from 0deg,#8b7cff,#4fd1ff,#5effc1,#ff7ab6,#8b7cff);animation:spin 1.1s linear infinite;}
 @keyframes spin{to{transform:rotate(1turn)}}
 </style>
-<div class="stage"><div class="aur-glow"></div><div class="aur"></div></div>
+<div class="stage"><div style="position:relative;width:84px;height:84px;flex:none"><div class="aur-glow" style="top:0;left:0"></div><div class="aur"></div></div></div>
 """),
     # 2 — Gooey blobs: SVG goo filter merges orbiting dots
     ("Gooey Blobs", "SVG goo filter — dots melt into each other", """
@@ -187,36 +187,14 @@ LOADERS = [
 """),
 ]
 
-def grid(items, render):
-    for i in range(0, len(items), 2):
-        cols = st.columns(2, gap="medium")
-        for col, (idx, item) in zip(cols, enumerate(items[i : i + 2], start=i + 1)):
-            with col:
-                render(idx, item)
 
-
-st.markdown("### CSS & SVG loaders")
-st.caption("Pure CSS / SVG — no JavaScript, no images.")
-cols_per_row = 2
-for i in range(0, len(LOADERS), cols_per_row):
-    cols = st.columns(cols_per_row, gap="medium")
-    for col, (idx, (name, sub, html)) in zip(cols, enumerate(LOADERS[i : i + cols_per_row], start=i + 1)):
-        with col:
-            components.html(BASE + html, height=222)
-            st.markdown(
-                f'<div class="card-title">{idx:02d} · {name}</div><div class="card-sub">{sub}</div>',
-                unsafe_allow_html=True,
-            )
-
-
-# ---------------------------------------------------------------- Lottie section
 import json
+import re
 from pathlib import Path
 
 LOTTIE = json.loads((Path(__file__).parent / "static/lottie/index.json").read_text())
 
-LOTTIE_TPL = BASE + """
-<div class="stage"><div id="a" style="width:190px;height:190px"></div></div>
+LOTTIE_JS = """
 <script>
 (async () => {
   const base = "/app/static/";
@@ -229,22 +207,99 @@ LOTTIE_TPL = BASE + """
 """
 
 
-def render_lottie(idx, m):
-    components.html(LOTTIE_TPL.replace("__FILE__", m["file"]), height=222)
-    st.markdown(
-        f'<div class="card-title">{idx:02d} · {m["name"]}</div>'
-        f'<div class="card-sub">{m["sub"]} · by <a href="{m["url"]}" target="_blank">{m["author"]}</a> on LottieFiles</div>',
-        unsafe_allow_html=True,
-    )
+def lottie_html(file, size=190, extra=""):
+    return (BASE + f'<div class="stage"><div id="a" aria-hidden="true" style="width:{size}px;height:{size}px;flex:none"></div>{extra}</div>'
+            + LOTTIE_JS.replace("__FILE__", file))
 
 
-st.markdown("### Lottie loaders")
-st.caption("The 10 best of 40 free loading animations reviewed on LottieFiles, played with lottie-web.")
-grid(LOTTIE, render_lottie)
+# ---------------------------------------------------------------- TraceBuddy branding
+BRAND = "TraceBuddy"
 
-with st.expander("CSS research shortlist — the ~28 patterns considered"):
-    st.markdown(
-        """
+BRAND_INK, BRAND_ACCENT = "#1d1f33", "#6d5dfc"  # accent darkened from #8b7cff for WCAG contrast on white
+
+BRAND_CSS = f"""
+<style>
+  .stage{{height:270px;flex-direction:column;gap:18px}}
+  .brand{{display:flex;flex-direction:column;align-items:center;gap:6px}}
+  .wm{{font-weight:700;font-size:24px;line-height:1;letter-spacing:-.02em;white-space:nowrap;color:{BRAND_INK}}}
+  .wm b{{font-weight:700;color:{BRAND_ACCENT}}}
+  .tag{{font-size:12.5px;color:#5f6478;letter-spacing:.01em}}
+  .sr{{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
+</style>
+"""
+
+TAGLINE = "Loading your traces…"
+WORDMARK = f'<div class="wm">Trace<b>Buddy</b></div>'
+SR = f'<span class="sr">{BRAND} is loading</span>'
+
+
+def brand_block():
+    return f'<div class="brand" aria-hidden="true">{WORDMARK}<div class="tag">{TAGLINE}</div></div>{SR}'
+
+
+def a11y(html):
+    """Mark the stage as a live status region; hide the decorative animation from screen readers."""
+    return re.sub(r'<div class="stage"', '<div class="stage" role="status" aria-live="polite"', html, count=1)
+
+
+def brand_css_loader(html):
+    if "<h3>LOADING</h3>" in html:  # text loader: the wordmark itself carries a colour-only sweep
+        html = (html.replace('<div class="sh">', '<div class="sh" aria-hidden="true">')
+                    .replace("<h3>LOADING</h3>", "<h3>TraceBuddy</h3>")
+                    .replace("letter-spacing:.06em", "letter-spacing:-.02em")
+                    .replace("#c7c9da 20%,#8b7cff 40%,#ff7ab6 50%,#c7c9da 70%",
+                             f"{BRAND_INK} 25%,{BRAND_ACCENT} 45%,#ff7ab6 52%,{BRAND_INK} 70%")
+                    .replace('<div class="bar"></div>', f'<div class="bar"></div><div class="tag">{TAGLINE}</div>'))
+        k = html.rindex("</div>")
+        return BASE + BRAND_CSS + a11y(html[:k] + SR + html[k:])
+    k = html.rindex("</div>")  # last </div> closes .stage
+    body = re.sub(r'(<div class="stage"[^>]*>)', r'\1<div aria-hidden="true" style="display:contents">', html[:k], count=1)
+    return BASE + BRAND_CSS + a11y(body + "</div>" + brand_block() + html[k:])
+
+
+# ---------------------------------------------------------------- layout helpers
+def grid(items, render):
+    for i in range(0, len(items), 2):
+        cols = st.columns(2, gap="medium")
+        for col, (idx, item) in zip(cols, enumerate(items[i : i + 2], start=i + 1)):
+            with col:
+                render(idx, item)
+
+
+def caption(idx, name, sub):
+    st.markdown(f'<div class="card-title">{idx:02d} · {name}</div><div class="card-sub">{sub}</div>',
+                unsafe_allow_html=True)
+
+
+def credit(m):
+    return f'{m["sub"]} · by <a href="{m["url"]}" target="_blank">{m["author"]}</a> on LottieFiles'
+
+
+tab_gallery, tab_brand = st.tabs(["Gallery", f"✦ {BRAND}"])
+
+with tab_gallery:
+    st.markdown("### CSS & SVG loaders")
+    st.caption("Pure CSS / SVG — no JavaScript, no images.")
+
+    def r_css(idx, item):
+        name, sub, html = item
+        components.html(BASE + html, height=222)
+        caption(idx, name, sub)
+
+    grid(LOADERS, r_css)
+
+    st.markdown("### Lottie loaders")
+    st.caption("The 10 best of 40 free loading animations reviewed on LottieFiles, played with lottie-web.")
+
+    def r_lottie(idx, m):
+        components.html(lottie_html(m["file"]), height=222)
+        caption(idx, m["name"], credit(m))
+
+    grid(LOTTIE, r_lottie)
+
+    with st.expander("CSS research shortlist — the ~28 patterns considered"):
+        st.markdown(
+            """
 **Picked (10):** Aurora conic ring · Gooey blobs · Orbit · DNA helix · Equalizer bars · Morphing blob ·
 Ripple/sonar · Infinity path · Newton's cradle · Shimmer text + bar
 
@@ -256,4 +311,26 @@ clock hands
 Chosen for motion quality (eased, continuous, non-jarring), visual distinctiveness from each other,
 a cohesive violet/cyan/pink/mint palette, and good legibility on a phone screen.
 """
-    )
+        )
+
+with tab_brand:
+    st.markdown(f"### {BRAND} loading screens")
+    st.caption("The same 20 loaders as branded loading states: one consistent wordmark, "
+               "a short status line, and a screen-reader announcement. Motion stays in the loader; the name stays still and legible.")
+
+    st.markdown("#### CSS & SVG")
+
+    def b_css(idx, item):
+        name, sub, html = item
+        components.html(brand_css_loader(html), height=272)
+        caption(idx, name, sub if "<h3>LOADING</h3>" not in html else "Colour-only sweep across the wordmark")
+
+    grid(LOADERS, b_css)
+
+    st.markdown("#### Lottie")
+
+    def b_lottie(idx, m):
+        components.html(a11y(lottie_html(m["file"], size=150, extra=BRAND_CSS + brand_block())), height=272)
+        caption(idx, m["name"], credit(m))
+
+    grid(LOTTIE, b_lottie)
