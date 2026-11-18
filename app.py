@@ -217,24 +217,26 @@ BRAND = "TraceBuddy"
 
 BRAND_INK, BRAND_ACCENT = "#1d1f33", "#6d5dfc"  # accent darkened from #8b7cff for WCAG contrast on white
 
+SHIMMER = f"{BRAND_INK} 25%,{BRAND_ACCENT} 45%,#ff7ab6 52%,{BRAND_INK} 70%"  # same sweep as the Shimmer Text loader
+
 BRAND_CSS = f"""
 <style>
   .stage{{height:270px;flex-direction:column;gap:18px}}
   .brand{{display:flex;flex-direction:column;align-items:center;gap:6px}}
-  .wm{{font-weight:700;font-size:24px;line-height:1;letter-spacing:-.02em;white-space:nowrap;color:{BRAND_INK}}}
-  .wm b{{font-weight:700;color:{BRAND_ACCENT}}}
-  .tag{{font-size:12.5px;color:#5f6478;letter-spacing:.01em}}
+  .wm{{font-weight:700;font-size:24px;line-height:1.15;letter-spacing:-.02em;white-space:nowrap;
+    background:linear-gradient(100deg,{SHIMMER});background-size:250% 100%;
+    -webkit-background-clip:text;background-clip:text;color:transparent;animation:wmsh 1.8s linear infinite}}
+  @keyframes wmsh{{from{{background-position:150% 0}}to{{background-position:-100% 0}}}}
   .sr{{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
 </style>
 """
 
-TAGLINE = "Loading your traces…"
-WORDMARK = f'<div class="wm">Trace<b>Buddy</b></div>'
+WORDMARK = f'<div class="wm">{BRAND}</div>'
 SR = f'<span class="sr">{BRAND} is loading</span>'
 
 
 def brand_block():
-    return f'<div class="brand" aria-hidden="true">{WORDMARK}<div class="tag">{TAGLINE}</div></div>{SR}'
+    return f'<div class="brand" aria-hidden="true">{WORDMARK}</div>{SR}'
 
 
 def a11y(html):
@@ -247,9 +249,7 @@ def brand_css_loader(html):
         html = (html.replace('<div class="sh">', '<div class="sh" aria-hidden="true">')
                     .replace("<h3>LOADING</h3>", "<h3>TraceBuddy</h3>")
                     .replace("letter-spacing:.06em", "letter-spacing:-.02em")
-                    .replace("#c7c9da 20%,#8b7cff 40%,#ff7ab6 50%,#c7c9da 70%",
-                             f"{BRAND_INK} 25%,{BRAND_ACCENT} 45%,#ff7ab6 52%,{BRAND_INK} 70%")
-                    .replace('<div class="bar"></div>', f'<div class="bar"></div><div class="tag">{TAGLINE}</div>'))
+                    .replace("#c7c9da 20%,#8b7cff 40%,#ff7ab6 50%,#c7c9da 70%", SHIMMER))
         k = html.rindex("</div>")
         return BASE + BRAND_CSS + a11y(html[:k] + SR + html[k:])
     k = html.rindex("</div>")  # last </div> closes .stage
@@ -315,15 +315,15 @@ a cohesive violet/cyan/pink/mint palette, and good legibility on a phone screen.
 
 with tab_brand:
     st.markdown(f"### {BRAND} loading screens")
-    st.caption("The same 20 loaders as branded loading states: one consistent wordmark, "
-               "a short status line, and a screen-reader announcement. Motion stays in the loader; the name stays still and legible.")
+    st.caption("The same 20 loaders as branded loading states: one consistent TraceBuddy wordmark with a "
+               "colour-only shimmer (letters never move or distort), plus a screen-reader announcement.")
 
     st.markdown("#### CSS & SVG")
 
     def b_css(idx, item):
         name, sub, html = item
         components.html(brand_css_loader(html), height=272)
-        caption(idx, name, sub if "<h3>LOADING</h3>" not in html else "Colour-only sweep across the wordmark")
+        caption(idx, name, sub if "<h3>LOADING</h3>" not in html else "Large shimmering wordmark with an indeterminate bar")
 
     grid(LOADERS, b_css)
 
